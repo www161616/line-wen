@@ -3,85 +3,17 @@ import re
 import random
 import anthropic
 
-# ====== 設定區（可自行修改）======
-BLOGGER_NAME = '包子媽'       # 第一人稱替換名稱
-END_HASHTAG = '#開團'          # 文末自動加上的標籤
-MIN_EMOJIS = 3                 # 最少插入幾個 LINE emoji
-MAX_CHARS = 300                # 文案精簡目標字數
+# ====== 設定區 ======
+BLOGGER_NAME = '包子媽'
+END_HASHTAG = '#開團'
 # ====== 設定區結束 ======
 
-# LINE Emoji 設定
-# 完整清單：https://developers.line.biz/en/docs/messaging-api/emoji-list/
-LINE_EMOJIS = {
-    'beauty': [
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '008'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},
-        {'productId': '5ac2197f040ab15980c9b435', 'emojiId': '018'},
-        {'productId': '5ac2197f040ab15980c9b435', 'emojiId': '015'},
-    ],
-    'food': [
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},
-    ],
-    'baby': [
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '008'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},
-    ],
-    'life': [
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '008'},
-    ],
-    'general': [
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},
-        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},
-    ],
-}
-
-# 關鍵字對應類別
-CATEGORY_KEYWORDS = {
-    'beauty': [
-        '保養', '美白', '精華', '面膜', '乳液', '護膚', '修復', '舒緩',
-        '肌膚', '防曬', '卸妝', '化妝水', '眼霜', '面霜', '清潔', '洗面',
-        '去角質', '抗老', '緊緻', '保濕', '冷感', '能量', '修護', '敏感肌',
-        '控油', '美容', '霜', '精華液', '安瓶', '凝膠', '凝露',
-    ],
-    'food': [
-        '美食', '零食', '好吃', '料理', '食品', '點心', '餅乾', '巧克力',
-        '甜點', '蛋糕', '麵包', '咖啡', '茶', '飲品', '調味', '醬料',
-        '有機', '營養', '沖泡', '果乾', '堅果', '即食',
-    ],
-    'baby': [
-        '寶寶', '嬰兒', '奶粉', '尿布', '副食品', '兒童', '親子',
-        '哺乳', '育兒', '玩具', '幼兒', '奶瓶', '推車', '安撫',
-    ],
-    'life': [
-        '居家', '收納', '清潔劑', '洗衣', '廚房', '家電', '生活',
-        '除臭', '芳香', '擴香', '洗碗', '拖把',
-    ],
-}
+# Claude API
+client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY', ''))
 
 # 內部備註的判斷模式（這些行會被自動移除）
 INTERNAL_PATTERNS = [
+    r'^_{1,}\s*.*(?:到貨|通知|截單|收單)',   # __5月中左右到貨通知
     r'重要.*廠商.*收單',
     r'重要.*收單',
     r'重要.*截單',
@@ -89,12 +21,11 @@ INTERNAL_PATTERNS = [
     r'廠商.*\d+[/.-]\d+.*截單',
     r'\d+[/.-]\d+\s*收單',
     r'\d+[/.-]\d+\s*截單',
-    r'_{3,}.*(?:到貨|通知|截單|收單)',
     r'^【內部】',
     r'^內部備註',
 ]
 
-# 要完整移除的標記
+# 要移除的標記
 REMOVE_TAGS = [
     r'\(emoji\)',
     r'\(sticker\)',
@@ -104,31 +35,49 @@ REMOVE_TAGS = [
     r'\(video\)',
 ]
 
-# Claude API client
-client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY', ''))
+# ====== AI Prompt ======
+SYSTEM_PROMPT = f"""你是一位專門為台灣團購社群撰寫文案的行銷達人，你的名字叫「{BLOGGER_NAME}」，目標受眾是 35–60 歲的台灣婆婆媽媽族群。
 
-SUMMARIZE_PROMPT = f"""你是「{BLOGGER_NAME}」的文案助手，負責把廠商提供的商品文案精簡整理。
+【你的寫作風格】
+- 口氣像閨蜜在跟你說悄悄話，熱情、親切、有點誇張但不浮誇
+- 大量使用 emoji（每段至少 1–2 個），讓版面活潑、有層次感
+- 善用「你是不是也...」「你有沒有...」句型，直接觸碰生活痛點
+- 多用感嘆號！驚嘆語氣！讓人感受到你的興奮！
+- 製造稀缺感與緊迫感（限量、結單倒數、錯過可惜）
+- 場景代入：讓媽媽想像這個商品出現在她生活中的畫面
+- 第一人稱用「{BLOGGER_NAME}」，不要用「我」（但「我們」可以保留）
 
-請遵守以下規則：
-1. 精簡到 {MAX_CHARS} 字以內（不含標點符號計算可以稍微寬鬆）
-2. 保留：商品名稱、價格、預購/到貨資訊
-3. 用「{BLOGGER_NAME}」的口吻重寫，語氣要生活化、親切，像是自己用過在推薦給朋友
-4. 第一人稱用「{BLOGGER_NAME}」，不要用「我」
-5. 保留重點賣點，去掉重複和過度描述
-6. 不要加 (emoji) 標記，不要加任何表情符號
-7. 不要加 #開團 標籤（系統會自動加）
-8. 不要加「---」分隔線
-9. 如果原文有使用步驟，精簡成一句話帶過即可
-10. 段落之間用一個空行分隔"""
+【固定文案格式】
+1. 商品名稱（大字標題）
+2. 結單日期（⏰開頭然後是日期加結單兩個字）
+3. 💲價格（大字顯示）
+4. 開場痛點（2–3句，引起共鳴）
+5. 商品亮點（用 📌 或其他適合的表情符號條列，每點有說明）
+6. 使用方式或場景描述（讓人想像用起來的感覺）
+7. 注意事項（簡短條列，如果原文有的話）
+8. 商品規格（重量/產地/保存/效期，如果原文有的話）
+9. 結尾催單句（製造緊迫感）
 
+【必須抓住的婆婆媽媽痛點雷達】
+- 健康照顧家人：「讓全家吃得安心」「孩子搶著吃」「孝敬長輩」
+- 省錢CP值：「百貨原價 xxx」「全市場最高CP值」「不怕你比較」
+- 方便省事：「免解凍直接下鍋」「5分鐘上菜」「懶人也會做」
+- 品質保證：「台灣製造」「嚴選食材」「幾千個回購評價」
+- 稀缺限量：「限量福利品」「數量不多」「這批賣完就沒了」
+- 場景描述：早餐/便當/消夜/送禮 等具體使用情境
 
-def detect_category(text):
-    """根據文案內容偵測商品類別。"""
-    scores = {}
-    for cat, keywords in CATEGORY_KEYWORDS.items():
-        scores[cat] = sum(1 for kw in keywords if kw in text)
-    best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else 'general'
+【禁止事項】
+- 不要用過於書面或生硬的語言
+- 不要寫太長的大段文字，要多分段、多換行
+- 不要省略 emoji
+- 不要誇大醫療效果（尤其保健品類）
+- 不要加 #開團 標籤（系統會自動加）
+- 不要加「---」分隔線
+
+【重要技巧】
+- 段落短，每段不超過3行，方便手機閱讀
+- 結尾要有強烈稀缺感，讓人覺得不買會後悔
+- 價格用 💲 符號"""
 
 
 def is_internal_line(line):
@@ -144,107 +93,99 @@ def is_internal_line(line):
 
 def basic_clean(text):
     """基本清理：移除內部備註和標記。"""
-    # 移除內部備註行
     lines = text.split('\n')
     cleaned_lines = [line for line in lines if not is_internal_line(line)]
     text = '\n'.join(cleaned_lines)
 
-    # 移除標記
     for tag_pattern in REMOVE_TAGS:
         text = re.sub(tag_pattern, '', text, flags=re.IGNORECASE)
 
-    # 清理空白
     text = re.sub(r' {2,}', ' ', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
-def summarize_with_ai(text):
-    """用 Claude AI 精簡文案到指定字數。"""
+def generate_copy(text, extra_instruction=None):
+    """用 Claude AI 改寫文案。"""
+    user_content = f'以下是要改寫的原始廠商文案：\n\n{text}'
+
+    if extra_instruction:
+        user_content += f'\n\n【額外要求】{extra_instruction}'
+
     try:
         message = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=1024,
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            messages=[{'role': 'user', 'content': user_content}],
+        )
+        return message.content[0].text.strip()
+    except Exception as e:
+        print(f'AI generate error: {e}')
+        return None
+
+
+def adjust_copy(original_text, previous_result, instruction):
+    """根據用戶指示調整已生成的文案。"""
+    try:
+        message = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
             messages=[
                 {
                     'role': 'user',
-                    'content': f'{SUMMARIZE_PROMPT}\n\n以下是要整理的原始文案：\n\n{text}',
-                }
+                    'content': f'以下是要改寫的原始廠商文案：\n\n{original_text}',
+                },
+                {
+                    'role': 'assistant',
+                    'content': previous_result,
+                },
+                {
+                    'role': 'user',
+                    'content': f'請根據以下要求調整你剛才寫的文案：\n{instruction}',
+                },
             ],
         )
         return message.content[0].text.strip()
     except Exception as e:
-        # AI 失敗時回退到基本清理
-        print(f'AI summarize error: {e}')
+        print(f'AI adjust error: {e}')
         return None
 
 
-def add_line_emojis(text, category):
-    """在文字中插入 $ 佔位符並建立 LINE emoji 資料。"""
-    # 先把原文中的 $ 替換成全形
-    text = text.replace('$', '＄')
-
-    # 找適合插入的位置（非空行開頭）
-    lines = text.split('\n')
-    candidates = [
-        i for i, line in enumerate(lines)
-        if line.strip()
-        and not line.strip().startswith('#')
-        and len(line.strip()) > 3
-    ]
-
-    if candidates:
-        count = min(MIN_EMOJIS, len(candidates))
-        selected = random.sample(candidates, count)
-        for idx in selected:
-            lines[idx] = '$' + lines[idx]
-
-    text = '\n'.join(lines)
-
-    # 建立 emoji 資料
-    emoji_pool = LINE_EMOJIS.get(category, LINE_EMOJIS['general'])
-    emojis = []
-    for i, char in enumerate(text):
-        if char == '$':
-            emoji_data = random.choice(emoji_pool)
-            emojis.append({
-                'index': i,
-                'productId': emoji_data['productId'],
-                'emojiId': emoji_data['emojiId'],
-            })
-
-    return text, emojis
-
-
-def clean_text(text):
+def clean_text(text, extra_instruction=None):
     """
     主要清理函式。
-    回傳 (cleaned_text, emoji_list)
+    回傳清理後的文案字串。
     """
-
-    # === 1. 基本清理 ===
+    # 基本清理
     cleaned = basic_clean(text)
 
-    # === 2. 偵測類別 ===
-    category = detect_category(cleaned)
+    # AI 改寫
+    result = generate_copy(cleaned, extra_instruction)
 
-    # === 3. AI 精簡文案 ===
-    summarized = summarize_with_ai(cleaned)
-    if summarized:
-        result = summarized
-    else:
-        # AI 失敗，用基本清理結果
+    if not result:
+        # AI 失敗時的降級處理
         result = cleaned
-        # 替換第一人稱
         result = result.replace('我們', '\x00WOMEN\x00')
         result = result.replace('我', BLOGGER_NAME)
         result = result.replace('\x00WOMEN\x00', '我們')
 
-    # === 4. 文末加標籤 ===
+    # 文末加標籤
     if END_HASHTAG and END_HASHTAG not in result:
         result += '\n\n' + END_HASHTAG
 
-    # === 5. 加入 LINE emoji ===
-    result, emoji_list = add_line_emojis(result, category)
+    return result
 
-    return result, emoji_list
+
+def adjust_text(original_text, previous_result, instruction):
+    """調整已生成的文案。"""
+    result = adjust_copy(original_text, previous_result, instruction)
+
+    if not result:
+        return None
+
+    if END_HASHTAG and END_HASHTAG not in result:
+        result += '\n\n' + END_HASHTAG
+
+    return result
