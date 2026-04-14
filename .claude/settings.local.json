@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "WebFetch(domain:line-wen.onrender.com)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://line-wen.onrender.com/callback)"
     ]
   }
 }
