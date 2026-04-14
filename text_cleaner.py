@@ -4,16 +4,55 @@ import random
 # ====== 設定區（可自行修改）======
 BLOGGER_NAME = '包子媽'       # 第一人稱替換名稱
 END_HASHTAG = '#開團'          # 文末自動加上的標籤
-MIN_EMOJIS = 2                 # 最少插入幾個表情符號
+MIN_EMOJIS = 2                 # 最少插入幾個 LINE emoji
 # ====== 設定區結束 ======
 
-# 依文案類別分組的表情符號
-EMOJIS = {
-    'beauty': ['✨', '💕', '🌸', '💖', '🌟', '💫', '🌺', '💗', '🪷', '💆‍♀️'],
-    'food':   ['😋', '🍽️', '👍', '❤️', '🌟', '✨', '🎉', '💕', '😍', '👏'],
-    'baby':   ['👶', '🍼', '💕', '✨', '🌟', '💖', '🎀', '👣', '💗', '🌸'],
-    'life':   ['🏠', '💡', '✨', '❤️', '👍', '🌟', '🎉', '💕', '🙌', '💪'],
-    'general': ['✨', '❤️', '🌟', '💕', '👍', '🎉', '💫', '🌸', '👏', '💖'],
+# LINE Emoji 設定
+# 完整清單：https://developers.line.biz/en/docs/messaging-api/emoji-list/
+# productId 對應不同的 emoji 組合包
+LINE_EMOJIS = {
+    'beauty': [
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},   # love eyes
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},   # heart
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},   # star
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},   # clap
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '008'},   # wink
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},   # thumbs up
+        {'productId': '5ac2197f040ab15980c9b435', 'emojiId': '018'},   # sparkle
+        {'productId': '5ac2197f040ab15980c9b435', 'emojiId': '015'},   # flower
+    ],
+    'food': [
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},   # love eyes
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},   # thumbs up
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},   # clap
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},   # smile
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},   # heart
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},   # star
+    ],
+    'baby': [
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},   # heart
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},   # love eyes
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},   # star
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},   # clap
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '008'},   # wink
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},   # smile
+    ],
+    'life': [
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},   # thumbs up
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},   # smile
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},   # clap
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},   # star
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},   # heart
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '008'},   # wink
+    ],
+    'general': [
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '001'},   # smile
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '005'},   # love eyes
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '069'},   # heart
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '085'},   # star
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '048'},   # thumbs up
+        {'productId': '5ac1bfd5040ab15980c9b435', 'emojiId': '036'},   # clap
+    ],
 }
 
 # 關鍵字對應類別
@@ -55,7 +94,6 @@ INTERNAL_PATTERNS = [
 
 # 要完整移除的標記（不分大小寫）
 REMOVE_TAGS = [
-    r'\(emoji\)',
     r'\(sticker\)',
     r'\(圖片\)',
     r'\(影片\)',
@@ -87,18 +125,16 @@ def is_internal_line(line):
 
 def replace_pronouns(text):
     """將第一人稱「我」替換成部落客名稱，但保留「我們」。"""
-    # 先保護不該替換的複合詞
     text = text.replace('我們', '\x00WOMEN\x00')
     text = text.replace('我', BLOGGER_NAME)
     text = text.replace('\x00WOMEN\x00', '我們')
     return text
 
 
-def sprinkle_emojis(text, emoji_pool, count=2):
-    """在適當的位置隨機插入表情符號。"""
+def sprinkle_emoji_placeholders(text, count=2):
+    """在適當的位置插入 $ 佔位符（給 LINE emoji 用）。"""
     lines = text.split('\n')
 
-    # 找出適合插入表情的行（非空、非標籤、有一定長度）
     candidates = [
         i for i, line in enumerate(lines)
         if line.strip()
@@ -112,23 +148,38 @@ def sprinkle_emojis(text, emoji_pool, count=2):
 
     selected = random.sample(candidates, min(count, len(candidates)))
     for idx in selected:
-        emoji = random.choice(emoji_pool)
-        lines[idx] = emoji + lines[idx]
+        lines[idx] = '$' + lines[idx]
 
     return '\n'.join(lines)
+
+
+def build_emoji_list(text, category):
+    """根據 $ 佔位符的位置，建立 LINE emoji 資料列表。"""
+    emoji_pool = LINE_EMOJIS.get(category, LINE_EMOJIS['general'])
+    emojis = []
+
+    for i, char in enumerate(text):
+        if char == '$':
+            emoji_data = random.choice(emoji_pool)
+            emojis.append({
+                'index': i,
+                'productId': emoji_data['productId'],
+                'emojiId': emoji_data['emojiId'],
+            })
+
+    return emojis
 
 
 def clean_text(text):
     """
     主要清理函式。
-    處理流程：
-    1. 移除內部備註行
-    2. 移除 (emoji)、(sticker) 等標記
-    3. 保留 (1)、(2)、(a)、(A) 等編號
-    4. 替換第一人稱
-    5. 插入表情符號
-    6. 文末加上 #開團
+    回傳 (cleaned_text, emoji_list)
+    - cleaned_text: 清理後的文字，LINE emoji 位置用 $ 標記
+    - emoji_list: LINE emoji 資料列表（給 TextMessage 的 emojis 參數用）
     """
+
+    # === 0. 先把原文中的 $ 替換成全形，避免衝突 ===
+    text = text.replace('$', '＄')
 
     # === 1. 移除內部備註行 ===
     lines = text.split('\n')
@@ -141,18 +192,12 @@ def clean_text(text):
 
     # === 2. 偵測文案類別 ===
     category = detect_category(text)
-    emoji_pool = EMOJIS.get(category, EMOJIS['general'])
 
-    # === 3. 處理 (emoji) → 替換成隨機表情符號 ===
-    def emoji_replacer(match):
-        return random.choice(emoji_pool)
-
-    text = re.sub(r'\(emoji\)', emoji_replacer, text, flags=re.IGNORECASE)
+    # === 3. 處理 (emoji) → 替換成 $ 佔位符 ===
+    text = re.sub(r'\(emoji\)', '$', text, flags=re.IGNORECASE)
 
     # === 4. 移除 (sticker) 等標記，但保留 (1)(2)(a)(A) ===
     for tag_pattern in REMOVE_TAGS:
-        if 'emoji' in tag_pattern:
-            continue  # 已經處理過了
         text = re.sub(tag_pattern, '', text, flags=re.IGNORECASE)
 
     # === 5. 替換第一人稱 ===
@@ -163,18 +208,16 @@ def clean_text(text):
     text = re.sub(r'\n{3,}', '\n\n', text)
     text = text.strip()
 
-    # === 7. 補充表情符號（如果太少） ===
-    # 計算目前文案中有多少表情符號
-    all_emojis = set()
-    for pool in EMOJIS.values():
-        all_emojis.update(pool)
-    current_count = sum(1 for c in text if c in all_emojis)
-
+    # === 7. 補充 emoji 佔位符（如果太少） ===
+    current_count = text.count('$')
     if current_count < MIN_EMOJIS:
-        text = sprinkle_emojis(text, emoji_pool, MIN_EMOJIS - current_count)
+        text = sprinkle_emoji_placeholders(text, MIN_EMOJIS - current_count)
 
     # === 8. 文末加上標籤 ===
     if END_HASHTAG and END_HASHTAG not in text:
         text += '\n\n' + END_HASHTAG
 
-    return text
+    # === 9. 建立 LINE emoji 資料 ===
+    emoji_list = build_emoji_list(text, category)
+
+    return text, emoji_list

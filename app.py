@@ -8,6 +8,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
+    Emoji,
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from dotenv import load_dotenv
@@ -41,33 +42,52 @@ def handle_message(event):
     # 說明指令
     if user_text.strip() in ('說明', '/help', '幫助'):
         help_msg = (
-            '📋 文案整理機器人\n\n'
+            '$ 文案整理機器人\n\n'
             '直接貼上廠商文案，我會幫你：\n'
-            '✅ 移除內部備註（收單日、到貨通知等）\n'
-            '✅ 清除 (emoji)、(sticker) 標記\n'
-            '✅ 保留 (1)(2)(a)(A) 等編號\n'
-            '✅ 第一人稱「我」→「包子媽」\n'
-            '✅ 自動加上表情符號\n'
-            '✅ 文末加上 #開團\n\n'
-            '貼上文案就可以囉！'
+            '$ 移除內部備註（收單日、到貨通知等）\n'
+            '$ 清除 (emoji)、(sticker) 標記\n'
+            '$ 保留 (1)(2)(a)(A) 等編號\n'
+            '$ 第一人稱「我」→「包子媽」\n'
+            '$ 自動加上 LINE 表情符號\n'
+            '$ 文末加上 #開團\n\n'
+            '貼上文案就可以囉 $'
         )
-        reply_single(event, help_msg)
+        help_emojis = [
+            Emoji(index=0, product_id='5ac1bfd5040ab15980c9b435', emoji_id='085'),
+            Emoji(index=19, product_id='5ac1bfd5040ab15980c9b435', emoji_id='048'),
+            Emoji(index=40, product_id='5ac1bfd5040ab15980c9b435', emoji_id='048'),
+            Emoji(index=63, product_id='5ac1bfd5040ab15980c9b435', emoji_id='048'),
+            Emoji(index=82, product_id='5ac1bfd5040ab15980c9b435', emoji_id='048'),
+            Emoji(index=101, product_id='5ac1bfd5040ab15980c9b435', emoji_id='048'),
+            Emoji(index=120, product_id='5ac1bfd5040ab15980c9b435', emoji_id='048'),
+            Emoji(index=138, product_id='5ac1bfd5040ab15980c9b435', emoji_id='069'),
+        ]
+        reply_with_emoji(event, help_msg, help_emojis)
         return
 
     # 太短的訊息不處理（可能是打招呼）
     if len(user_text.strip()) < 10:
-        reply_single(event, '請貼上要整理的廠商文案，我會幫你處理好 ✨')
+        msg = '請貼上要整理的廠商文案，我會幫你處理好 $'
+        emojis = [Emoji(index=len(msg) - 1, product_id='5ac1bfd5040ab15980c9b435', emoji_id='001')]
+        reply_with_emoji(event, msg, emojis)
         return
 
     # 清理文案
-    cleaned = clean_text(user_text)
+    cleaned, emoji_list = clean_text(user_text)
 
-    # LINE 單則訊息上限 5000 字，超過就分段
+    # 建立 Emoji 物件
+    emojis = [
+        Emoji(index=e['index'], product_id=e['productId'], emoji_id=e['emojiId'])
+        for e in emoji_list
+    ]
+
+    # LINE 單則訊息上限 5000 字
     if len(cleaned) <= 5000:
-        reply_single(event, cleaned)
+        reply_with_emoji(event, cleaned, emojis)
     else:
+        # 超長文案分段（分段時不帶 emoji，避免 index 錯亂）
         parts = split_text(cleaned, 5000)
-        messages = [TextMessage(text=p) for p in parts[:5]]  # LINE 一次最多回 5 則
+        messages = [TextMessage(text=p) for p in parts[:5]]
         with ApiClient(configuration) as api_client:
             api = MessagingApi(api_client)
             api.reply_message(
@@ -78,14 +98,18 @@ def handle_message(event):
             )
 
 
-def reply_single(event, text):
-    """回覆單則文字訊息。"""
+def reply_with_emoji(event, text, emojis=None):
+    """回覆帶有 LINE emoji 的文字訊息。"""
     with ApiClient(configuration) as api_client:
         api = MessagingApi(api_client)
+        if emojis:
+            msg = TextMessage(text=text, emojis=emojis)
+        else:
+            msg = TextMessage(text=text)
         api.reply_message(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=text)],
+                messages=[msg],
             )
         )
 
