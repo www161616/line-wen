@@ -1,6 +1,7 @@
 import os
 import re
 import traceback
+import unicodedata
 from collections import OrderedDict
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
@@ -46,6 +47,48 @@ class UserStateCache(OrderedDict):
 
 
 user_states = UserStateCache()
+
+
+def is_remove_emoji_command(text):
+    """判斷是否是清除 emoji 的指令。"""
+    keywords = ['清除emoji', '移除emoji', 'emoji清', '清光emoji',
+                '清掉emoji', '刪除emoji', '拿掉emoji', '去掉emoji',
+                '不要emoji', '清除表情', '移除表情', '表情清',
+                '清光表情', '清掉表情', '刪除表情', '拿掉表情',
+                '去掉表情', '不要表情', 'emoji都清', '表情都清',
+                '把emoji', '把表情']
+    normalized = text.lower().replace(' ', '')
+    return any(kw.replace(' ', '') in normalized for kw in keywords)
+
+
+def strip_emojis(text):
+    """移除文字中所有的 Unicode emoji。"""
+    result = []
+    for char in text:
+        # 保留基本標點和文字，過濾 emoji
+        cat = unicodedata.category(char)
+        if cat.startswith('So'):  # Symbol, Other (大部分 emoji)
+            continue
+        # 過濾特殊 emoji 範圍
+        cp = ord(char)
+        if (0x1F600 <= cp <= 0x1F64F or   # 表情
+            0x1F300 <= cp <= 0x1F5FF or    # 符號圖標
+            0x1F680 <= cp <= 0x1F6FF or    # 交通地圖
+            0x1F900 <= cp <= 0x1F9FF or    # 補充表情
+            0x1FA00 <= cp <= 0x1FA6F or    # 延伸符號
+            0x1FA70 <= cp <= 0x1FAFF or    # 延伸符號B
+            0x2600 <= cp <= 0x26FF or      # 雜項符號
+            0x2700 <= cp <= 0x27BF or      # 裝飾符號
+            0xFE00 <= cp <= 0xFE0F or      # 變體選擇符
+            0x200D == cp):                  # 零寬連接符
+            continue
+        result.append(char)
+
+    cleaned = ''.join(result)
+    # 清理多餘空白
+    cleaned = re.sub(r' {2,}', ' ', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
 
 
 def looks_like_product_copy(text):
@@ -98,9 +141,17 @@ def handle_message(event):
             )
             return
 
-        # === 判斷：是新文案 還是 調整指令 ===
+        # === 清除 emoji 指令 ===
         state = user_states.get_state(user_id)
 
+        if state and is_remove_emoji_command(user_text):
+            result = strip_emojis(state['result'])
+            state['result'] = result
+            user_states.set(user_id, state)
+            send_long_text(event, result)
+            return
+
+        # === 判斷：是新文案 還是 調整指令 ===
         if state and not looks_like_product_copy(user_text):
             # 這是對話調整指令
             app.logger.info(f'Adjusting for user {user_id}: {user_text}')
