@@ -104,18 +104,25 @@ def handle_message(event):
         if state and not looks_like_product_copy(user_text):
             # 這是對話調整指令
             app.logger.info(f'Adjusting for user {user_id}: {user_text}')
+
+            # 先嘗試用對話方式調整
             result = adjust_text(
                 state['original'],
                 state['result'],
                 user_text,
             )
+
+            # 如果對話調整失敗，就用原文重新生成（帶上用戶的指示）
+            if not result:
+                app.logger.info('Adjust failed, falling back to regenerate')
+                result = clean_text(state['original'], extra_instruction=user_text)
+
             if result:
-                # 更新記憶
                 state['result'] = result
                 user_states.set(user_id, state)
                 send_long_text(event, result)
             else:
-                reply(event, '調整失敗了，請再試一次 🙏')
+                reply(event, '處理失敗了 😢 請重新貼一次文案試試')
             return
 
         # === 太短的文字 ===
