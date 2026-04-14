@@ -15,7 +15,7 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from dotenv import load_dotenv
-from text_cleaner import clean_text, adjust_text
+from text_cleaner import clean_text, adjust_text, basic_clean, force_strip_emojis
 
 load_dotenv()
 
@@ -91,6 +91,14 @@ def strip_emojis(text):
     return cleaned.strip()
 
 
+def is_rewrite_command(text):
+    """判斷是否是要求 AI 改寫的指令。"""
+    keywords = ['改寫', '重寫', 'AI改', 'ai改', '幫我改寫', '幫我重寫',
+                '用AI改', '用ai改', '改寫文案', '重寫文案']
+    normalized = text.lower().replace(' ', '')
+    return any(kw.replace(' ', '') in normalized for kw in keywords)
+
+
 def looks_like_product_copy(text):
     """判斷文字是否像商品文案（而非對話調整指令）。"""
     if '\n' in text and len(text) > 80:
@@ -129,41 +137,44 @@ def handle_message(event):
         # === 說明指令 ===
         if user_text in ('說明', '/help', '幫助'):
             reply(event,
-                '📋 文案整理機器人\n\n'
-                '📝 貼上廠商文案 → 自動改寫成團購風格\n\n'
-                '💬 改完之後可以直接對話調整：\n'
-                '• 「長一點」「短一點」\n'
-                '• 「再活潑一點」「語氣熱情一點」\n'
-                '• 「加上送禮場景」\n'
-                '• 「多強調CP值」\n'
-                '• 「再改一次」\n\n'
-                '直接貼文案就可以開始囉！✨'
+                '文案整理機器人\n\n'
+                '直接貼上文案 → 回傳清理後的原文（去emoji、去內部備註）\n\n'
+                '整理完可以接著說：\n'
+                '- 「改寫」→ AI 幫你重寫成團購風格\n'
+                '- 「長一點」「短一點」\n'
+                '- 「再活潑一點」\n'
+                '- 「加上送禮場景」\n'
+                '- 「多強調CP值」\n'
+                '- 任何調整需求都可以直接說\n\n'
+                '貼文案就可以開始囉！'
             )
             return
 
-        # === 清除 emoji 指令 ===
+        # === 取得用戶狀態 ===
         state = user_states.get_state(user_id)
 
-        if state and is_remove_emoji_command(user_text):
-            result = strip_emojis(state['result'])
-            state['result'] = result
-            user_states.set(user_id, state)
-            send_long_text(event, result)
+        # === 「改寫」指令：用 AI 重寫上一篇 ===
+        if state and is_rewrite_command(user_text):
+            app.logger.info(f'AI rewrite for user {user_id}')
+            result = clean_text(state['original'])
+            if result:
+                state['result'] = result
+                user_states.set(user_id, state)
+                send_long_text(event, result)
+            else:
+                reply(event, '改寫失敗了，請再試一次')
             return
 
-        # === 判斷：是新文案 還是 調整指令 ===
+        # === 對話調整指令 ===
         if state and not looks_like_product_copy(user_text):
-            # 這是對話調整指令
             app.logger.info(f'Adjusting for user {user_id}: {user_text}')
 
-            # 先嘗試用對話方式調整
             result = adjust_text(
                 state['original'],
                 state['result'],
                 user_text,
             )
 
-            # 如果對話調整失敗，就用原文重新生成（帶上用戶的指示）
             if not result:
                 app.logger.info('Adjust failed, falling back to regenerate')
                 result = clean_text(state['original'], extra_instruction=user_text)
@@ -173,19 +184,23 @@ def handle_message(event):
                 user_states.set(user_id, state)
                 send_long_text(event, result)
             else:
-                reply(event, '處理失敗了 😢 請重新貼一次文案試試')
+                reply(event, '處理失敗了，請重新貼一次文案試試')
             return
 
         # === 太短的文字 ===
         if len(user_text) < 10:
-            reply(event, '請貼上要整理的廠商文案，我會幫你改寫成團購風格 ✨')
+            reply(event, '請貼上要整理的廠商文案！')
             return
 
-        # === 處理新文案 ===
-        app.logger.info(f'Processing new copy for user {user_id}')
-        result = clean_text(user_text)
+        # === 預設模式：原文清理（去 emoji、去內部備註）===
+        app.logger.info(f'Basic clean for user {user_id}')
+        result = basic_clean(user_text)
+        result = force_strip_emojis(result)
 
-        # 儲存狀態，讓用戶可以後續調整
+        if '#開團' not in result:
+            result += '\n\n#開團'
+
+        # 儲存狀態，讓用戶可以後續說「改寫」或其他調整
         user_states.set(user_id, {
             'original': user_text,
             'result': result,
